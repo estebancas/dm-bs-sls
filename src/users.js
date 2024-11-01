@@ -1,6 +1,6 @@
 const { DynamoDBClient } = require("@aws-sdk/client-dynamodb");
 const { v4: uuidv4 } = require("uuid");
-const jwt = require('jsonwebtoken');
+const jwt = require("jsonwebtoken");
 
 const {
   DynamoDBDocumentClient,
@@ -18,12 +18,12 @@ const app = express();
 const USERS_TABLE = process.env.USERS_TABLE;
 const client = new DynamoDBClient();
 const docClient = DynamoDBDocumentClient.from(client);
-const tokenSecret = 'dm_bs_secret';
+const tokenSecret = "dm_bs_secret";
 
 app.use(express.json());
 
 const authenticateJWT = (req, res, next) => {
-  const token = req.headers.authorization?.split(' ')[1];
+  const token = req.headers.authorization?.split(" ")[1];
 
   if (!token) {
     return res.sendStatus(401);
@@ -60,7 +60,7 @@ const findUserById = async (id) => {
   }
 };
 
-app.get("/users/:userId", async (req, res) => {
+app.get("/users/:userId", authenticateJWT, async (req, res) => {
   const userId = req.params.userId;
 
   try {
@@ -123,9 +123,9 @@ app.post("/users", async (req, res) => {
     const command = new PutCommand(params);
     await docClient.send(command);
 
-    const token = jwt.sign({ id, name }, tokenSecret, { expiresIn: '30d' });
+    const token = jwt.sign({ id, name }, tokenSecret, { expiresIn: "30d" });
 
-    res.json({ email, name, token });
+    res.json({ email, name, token, id });
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: "Could not create user" });
@@ -141,7 +141,11 @@ app.post("/users/login", async (req, res) => {
 
   if (email) {
     const userExist = await findUserByEmail(email);
-    const token = jwt.sign({ id: userExist.id, name: userExist.name }, tokenSecret, { expiresIn: '30d' });
+    const token = jwt.sign(
+      { id: userExist.id, name: userExist.name },
+      tokenSecret,
+      { expiresIn: "30d" }
+    );
 
     if (userExist && userExist.name === name) {
       res.json({ ...userExist, token });
@@ -151,12 +155,12 @@ app.post("/users/login", async (req, res) => {
   }
 });
 
-app.put("/users/:userId", async (req, res) => {
-  const userId = req.params.userId;
-  const { name, email, comment, survey } = req.body;
+app.put("/users", authenticateJWT, async (req, res) => {
+  const userId = req.user.id;
+  const { comment, survey, email } = req.body;
 
-  if (typeof name !== "string") {
-    return res.status(400).json({ error: '"name" must be a string' });
+  if (!comment && !survey && email) {
+    return res.status(500).json({ error: "bad request" });
   }
 
   const user = await findUserById(userId);
@@ -178,17 +182,15 @@ app.put("/users/:userId", async (req, res) => {
     Key: {
       id: userId,
     },
-    UpdateExpression: `SET #nm = :n ${email ? ", #em = :e" : ""} ${
+    UpdateExpression: `SET ${email ? ", #em = :e" : ""} ${
       comment ? ", #comment = :comment" : ""
     } ${survey ? ", #survey = :survey" : ""}`,
     ExpressionAttributeNames: {
-      "#nm": "name",
       ...(email ? { "#em": "email" } : {}),
       ...(comment ? { "#comment": "comment" } : {}),
       ...(survey ? { "#survey": "survey" } : {}),
     },
     ExpressionAttributeValues: {
-      ":n": name,
       ...(email ? { ":e": email } : {}),
       ...(comment ? { ":comment": comment } : {}),
       ...(survey ? { ":survey": survey } : {}),

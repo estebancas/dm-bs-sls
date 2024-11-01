@@ -41,6 +41,12 @@ functions:
       - http:
           path: /users/{userId}
           method: put
+  login:
+    handler: src/users.handler
+    events:
+      - http:
+          path: /users/login
+          method: post
 
 resources:
   Resources:
