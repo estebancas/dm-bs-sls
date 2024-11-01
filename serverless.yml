@@ -1,0 +1,60 @@
+# serverless.yml
+
+org: nsspyre
+app: dm-bs-sls
+service: dm-bs-sls
+
+stages:
+  default:
+    params:
+      tableName: "dm_bs_users"
+
+provider:
+  name: aws
+  runtime: nodejs20.x
+  iam:
+    role:
+      statements:
+        - Effect: Allow
+          Action:
+            - dynamodb:Query
+            - dynamodb:Scan
+            - dynamodb:GetItem
+            - dynamodb:PutItem
+            - dynamodb:UpdateItem
+            - dynamodb:DeleteItem
+          Resource:
+            - Fn::GetAtt: [UsersTable, Arn]
+  environment:
+    USERS_TABLE: ${param:tableName}
+
+functions:
+  register:
+    handler: src/users.handler
+    events:
+      - http:
+          path: /users
+          method: post
+  updatUser:
+    handler: src/users.handler
+    events:
+      - http:
+          path: /users/{userId}
+          method: put
+
+resources:
+  Resources:
+    dm_bs_users:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        AttributeDefinitions:
+          - AttributeName: id
+            AttributeType: S
+        KeySchema:
+          - AttributeName: id
+            KeyType: HASH
+        BillingMode: PAY_PER_REQUEST
+        TableName: ${param:tableName}
+
+plugins:
+  - serverless-offline
